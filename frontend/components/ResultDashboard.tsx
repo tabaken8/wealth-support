@@ -544,12 +544,9 @@ export default function ResultDashboard({ result, formData, onReset }: ResultDas
     setIsFullReloading(false);
   };
 
-  const addEvent = async (c: FutureChange | null, l: LumpSumAddition | null) => {
-    const newChanges = c ? [...localChanges, c] : localChanges;
-    const newLumps   = l ? [...localLumps,   l] : localLumps;
-    setLocalChanges(newChanges);
-    setLocalLumps(newLumps);
-    // Re-simulate with new events immediately
+  /** Shared helper: re-simulate with updated events, skipping AI (fast path).
+   *  Preserves existing AI explanation text so the panel doesn't flicker blank. */
+  const resimulateEvents = async (newChanges: FutureChange[], newLumps: LumpSumAddition[]) => {
     setIsResimulating(true);
     try {
       const res = await fetch(`${API_URL}/api/simulate`, {
@@ -563,13 +560,30 @@ export default function ResultDashboard({ result, formData, onReset }: ResultDas
           custom_allocation: isCustomMode && Object.keys(customAllocation).length > 0
             ? customAllocation
             : undefined,
-          future_changes: [...(formData.future_changes ?? []), ...newChanges],
-          lump_sum_additions: [...(formData.lump_sum_additions ?? []), ...newLumps],
+          future_changes:       [...(formData.future_changes       ?? []), ...newChanges],
+          lump_sum_additions:   [...(formData.lump_sum_additions   ?? []), ...newLumps],
+          skip_ai: true,   // skip Anthropic call — cuts latency from ~5s to ~1s
         }),
       });
-      if (res.ok) setCurrentResult(await res.json());
-    } catch { /* keep */ }
+      if (res.ok) {
+        const fresh = await res.json();
+        // Preserve existing AI text (skip_ai returns empty strings)
+        setCurrentResult(prev => prev ? {
+          ...fresh,
+          explanation_analysis: fresh.explanation_analysis || prev.explanation_analysis,
+          explanation_advice:   fresh.explanation_advice   || prev.explanation_advice,
+        } : fresh);
+      }
+    } catch { /* keep current result */ }
     finally { setIsResimulating(false); }
+  };
+
+  const addEvent = async (c: FutureChange | null, l: LumpSumAddition | null) => {
+    const newChanges = c ? [...localChanges, c] : localChanges;
+    const newLumps   = l ? [...localLumps,   l] : localLumps;
+    setLocalChanges(newChanges);
+    setLocalLumps(newLumps);
+    await resimulateEvents(newChanges, newLumps);
   };
 
   const removeEvent = async (type: 'change' | 'lump', idx: number) => {
@@ -577,25 +591,7 @@ export default function ResultDashboard({ result, formData, onReset }: ResultDas
     const newLumps   = type === 'lump'   ? localLumps.filter((_, i) => i !== idx)   : localLumps;
     setLocalChanges(newChanges);
     setLocalLumps(newLumps);
-    setIsResimulating(true);
-    try {
-      const res = await fetch(`${API_URL}/api/simulate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData, ...editParams,
-          risk_level: activeRisk,
-          portfolio_name: isCustomMode ? undefined : portfolioName ?? undefined,
-          custom_allocation: isCustomMode && Object.keys(customAllocation).length > 0
-            ? customAllocation
-            : undefined,
-          future_changes: [...(formData.future_changes ?? []), ...newChanges],
-          lump_sum_additions: [...(formData.lump_sum_additions ?? []), ...newLumps],
-        }),
-      });
-      if (res.ok) setCurrentResult(await res.json());
-    } catch { /* keep */ }
-    finally { setIsResimulating(false); }
+    await resimulateEvents(newChanges, newLumps);
   };
 
   // ── Param fields config ──────────────────────────────────────────────────────
@@ -806,7 +802,7 @@ export default function ResultDashboard({ result, formData, onReset }: ResultDas
             <div className={`flex-1 min-w-0 space-y-6 ${mobileTab === 'settings' ? 'hidden lg:block' : ''}`}>
 
               {/* ── Fan chart ─────────────────────────────────────────── */}
-              <div className="card">
+              <div className="card relative">
                 <FanChart
                   data={currentResult}
                   goal={editParams.goal}
@@ -819,6 +815,18 @@ export default function ResultDashboard({ result, formData, onReset }: ResultDas
                   activeScenario={activeScenario}
                   depositTerminalValue={currentResult.deposit_terminal}
                 />
+                {/* Overlay while fan band is being updated from backend */}
+                {isResimulating && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-2xl backdrop-blur-[2px] z-10">
+                    <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-full px-4 py-2 shadow-sm text-sm text-slate-500">
+                      <svg className="animate-spin h-4 w-4 text-blue-500" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      シミュレーション更新中…
+                    </div>
+                  </div>
+                )}
 
                 {/* Event list + add form */}
                 <div className="mt-4 pt-4 border-t border-slate-100">

@@ -314,6 +314,8 @@ class SimulateRequest(BaseModel):
     invest_style: Optional[str] = None
     invest_approach: Optional[str] = None
     invest_start_years_later: Optional[int] = None
+    # When True, skip the Anthropic AI explanation (faster response for event-only updates)
+    skip_ai: Optional[bool] = False
 
 
 class SimulateResponse(BaseModel):
@@ -1147,15 +1149,18 @@ async def simulate(req: SimulateRequest):
     weighted_avg_vol = sum(s.weight * s.annual_vol for s in asset_stats)
     diversification_ratio = round(weighted_avg_vol / annual_vol, 3) if annual_vol > 0 else 1.0
 
-    # AI explanation
-    analysis, advice = generate_explanation(
-        req.savings, req.monthly, req.goal, req.years,
-        req.risk_level, achievement_prob, annual_return, allocation,
-        age=req.age, notes=req.notes,
-        prob_plus_1man=prob_plus_1man,
-        prob_plus_3years=prob_plus_3years,
-        diversification_ratio=diversification_ratio,
-    )
+    # AI explanation (skip when only events/contributions changed — faster UX)
+    if req.skip_ai:
+        analysis, advice = "", ""
+    else:
+        analysis, advice = generate_explanation(
+            req.savings, req.monthly, req.goal, req.years,
+            req.risk_level, achievement_prob, annual_return, allocation,
+            age=req.age, notes=req.notes,
+            prob_plus_1man=prob_plus_1man,
+            prob_plus_3years=prob_plus_3years,
+            diversification_ratio=diversification_ratio,
+        )
 
     # IRR + deposit terminal
     dep_terminal = calc_deposit_terminal(
