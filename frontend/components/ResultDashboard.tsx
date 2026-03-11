@@ -1012,7 +1012,7 @@ export default function ResultDashboard({ result, formData, onReset }: ResultDas
               />
 
               <NisaCard result={currentResult} />
-              <ShareCard editParams={editParams} activeRisk={activeRisk} />
+              <ShareCard editParams={editParams} activeRisk={activeRisk} result={currentResult} />
 
               <p className="text-center text-slate-400 text-xs">
                 ※ オルカン(VT)・S&P500(SPY)・日本株(EWJ)・米国債(AGG)・金(GLD)・短期国債(SHV)の過去データに基づく確率シミュレーションの結果です。
@@ -1558,64 +1558,106 @@ function SectionLabel({ number, title, subtitle }: { number: string; title: stri
 
 // ── Share card ────────────────────────────────────────────────────────────────
 
+type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
 function ShareCard({
   editParams,
   activeRisk,
+  result,
 }: {
   editParams: { age: number; savings: number; monthly: number; goal: number; years: number };
   activeRisk: RiskLevel;
+  result: SimulateResponse;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [shareUrl,  setShareUrl]  = useState<string | null>(null);
+  const [copied,    setCopied]    = useState(false);
 
-  const buildUrl = useCallback(() => {
-    const params = new URLSearchParams({
-      age:        String(editParams.age),
-      savings:    String(editParams.savings),
-      monthly:    String(editParams.monthly),
-      goal:       String(editParams.goal),
-      years:      String(editParams.years),
-      risk_level: activeRisk,
-    });
-    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-  }, [editParams, activeRisk]);
+  const handleSave = async () => {
+    setSaveState('saving');
+    try {
+      const res = await fetch(`${API_URL}/api/share`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request_data: { ...editParams, risk_level: activeRisk },
+          result_data:  result,
+        }),
+      });
+      if (!res.ok) throw new Error('save failed');
+      const { share_id } = await res.json();
+      const url = `${window.location.origin}${window.location.pathname}?share=${share_id}`;
+      setShareUrl(url);
+      setSaveState('saved');
+    } catch {
+      setSaveState('error');
+    }
+  };
 
   const handleCopy = async () => {
+    if (!shareUrl) return;
     try {
-      await navigator.clipboard.writeText(buildUrl());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      await navigator.clipboard.writeText(shareUrl);
     } catch {
-      // fallback: select text
-      const url = buildUrl();
       const el = document.createElement('textarea');
-      el.value = url;
+      el.value = shareUrl;
       document.body.appendChild(el);
       el.select();
       document.execCommand('copy');
       document.body.removeChild(el);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   return (
     <div className="card bg-gradient-to-br from-slate-50 to-blue-50 border border-blue-100">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-bold text-slate-700">このシミュレーションを共有</h3>
-          <p className="text-xs text-slate-400 mt-0.5">URLをコピーして友人や家族に送れます</p>
+          <h3 className="font-bold text-slate-700">このシミュレーションを保存</h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {saveState === 'saved'
+              ? 'URLをブックマーク・シェアできます'
+              : 'グラフ・AIコメントごと永続保存してURLを発行します'}
+          </p>
         </div>
-        <button
-          onClick={handleCopy}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-            copied
-              ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
-              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
-          }`}
-        >
-          {copied ? '✅ コピーしました' : '🔗 URLをコピー'}
-        </button>
+        {saveState !== 'saved' && (
+          <button
+            onClick={saveState === 'error' ? () => setSaveState('idle') : handleSave}
+            disabled={saveState === 'saving'}
+            className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+              saveState === 'error'
+                ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200'
+                : saveState === 'saving'
+                ? 'bg-blue-100 text-blue-500 cursor-wait border border-blue-200'
+                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+            }`}
+          >
+            {saveState === 'saving' ? '⏳ 保存中…' : saveState === 'error' ? '⚠️ 失敗 — 再試行' : '💾 保存してシェア'}
+          </button>
+        )}
       </div>
+
+      {saveState === 'saved' && shareUrl && (
+        <div className="mt-3 flex items-center gap-2 animate-fade-in">
+          <input
+            readOnly
+            value={shareUrl}
+            className="flex-1 text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-600 font-mono truncate"
+            onFocus={e => e.target.select()}
+          />
+          <button
+            onClick={handleCopy}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              copied
+                ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+            }`}
+          >
+            {copied ? '✅' : '📋 コピー'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

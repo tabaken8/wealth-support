@@ -11,6 +11,11 @@ const VALID_RISKS: RiskLevel[] = ['low', 'medium', 'high'];
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
 
+function parseShareId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('share');
+}
+
 function parseUrlParams(): SimulateRequest | null {
   if (typeof window === 'undefined') return null;
   const p = new URLSearchParams(window.location.search);
@@ -57,6 +62,23 @@ function HomeContent() {
   // Keep a stable ref so the popstate listener always calls the latest version
   const handleSubmitRef = useRef<(data: SimulateRequest) => Promise<void>>(async () => {});
 
+  /** Load a previously saved simulation by UUID (/api/share/:id) */
+  const loadShared = async (shareId: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/share/${shareId}`);
+      if (!res.ok) throw new Error('保存されたシミュレーションが見つかりません');
+      const { request_data, result_data } = await res.json();
+      setFormData(request_data as SimulateRequest);
+      setResult(result_data as SimulateResponse);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'シミュレーションの読み込みに失敗しました');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (data: SimulateRequest) => {
     setIsLoading(true);
     setError(null);
@@ -92,10 +114,15 @@ function HomeContent() {
     pushResetState();
   };
 
-  // On mount: simulate if URL already has params (direct shared link)
+  // On mount: load saved simulation (share=UUID) or re-simulate from URL params
   useEffect(() => {
-    const req = parseUrlParams();
-    if (req) handleSubmitRef.current(req);
+    const shareId = parseShareId();
+    if (shareId) {
+      loadShared(shareId);
+    } else {
+      const req = parseUrlParams();
+      if (req) handleSubmitRef.current(req);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

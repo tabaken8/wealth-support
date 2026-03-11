@@ -1206,6 +1206,59 @@ async def simulate(req: SimulateRequest):
 
 _asset_history_cache: dict = {"data": None, "expires": datetime.min}
 
+# ── Share / Save endpoints ─────────────────────────────────────────────────────
+
+class ShareSaveRequest(BaseModel):
+    request_data: dict
+    result_data: dict
+
+class ShareSaveResponse(BaseModel):
+    share_id: str
+
+
+@app.post("/api/share", response_model=ShareSaveResponse)
+async def save_simulation(body: ShareSaveRequest):
+    """Persist a simulation result to Supabase and return a UUID."""
+    if _supabase is None:
+        raise HTTPException(status_code=503, detail="Storage not configured (SUPABASE_URL / SUPABASE_KEY missing)")
+    try:
+        resp = (
+            _supabase.table("shared_simulations")
+            .insert({
+                "created_at":   datetime.now(JST).isoformat(),
+                "request_data": body.request_data,
+                "result_data":  body.result_data,
+            })
+            .execute()
+        )
+        share_id = resp.data[0]["id"]
+        return ShareSaveResponse(share_id=share_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save simulation: {exc}")
+
+
+@app.get("/api/share/{share_id}")
+async def load_simulation(share_id: str):
+    """Retrieve a saved simulation by UUID."""
+    if _supabase is None:
+        raise HTTPException(status_code=503, detail="Storage not configured (SUPABASE_URL / SUPABASE_KEY missing)")
+    try:
+        resp = (
+            _supabase.table("shared_simulations")
+            .select("request_data, result_data")
+            .eq("id", share_id)
+            .single()
+            .execute()
+        )
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Simulation not found")
+        return resp.data
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=f"Simulation not found: {exc}")
+
+
 @app.get("/api/asset-history")
 async def asset_history():
     """Return 10-year monthly normalized returns (start = 1.0) for all 6 tickers."""
