@@ -31,7 +31,13 @@ function TradingViewMiniChart({ symbol, label, color }: MiniChartProps) {
 <html>
 <head>
   <meta charset="utf-8">
-  <style>html,body{margin:0;padding:0;overflow:hidden;background:#f8fafc}</style>
+  <style>
+    html,body{margin:0;padding:0;overflow:hidden;background:#f8fafc}
+    /* Hide TradingView delayed-data label (class names vary by build) */
+    [class*="delay"i],[class*="Delay"],[class*="delayed"i],
+    [class*="quote-delay"],[class*="quoteDelay"],
+    .tv-symbol-price-quote__currency-and-delay { display:none !important; }
+  </style>
 </head>
 <body>
   <div class="tradingview-widget-container" style="height:115px;width:100%">
@@ -40,6 +46,29 @@ function TradingViewMiniChart({ symbol, label, color }: MiniChartProps) {
       src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js"
       async>${config}</script>
   </div>
+  <script>
+    // MutationObserver fallback: hide any element whose text is exactly "遅"
+    (function(){
+      function hideDelay(root){
+        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+        var node;
+        while((node = walker.nextNode())){
+          if(node.nodeValue && node.nodeValue.trim() === '遅'){
+            var el = node.parentElement;
+            if(el) el.style.setProperty('display','none','important');
+          }
+        }
+      }
+      var mo = new MutationObserver(function(mutations){
+        mutations.forEach(function(m){
+          m.addedNodes.forEach(function(n){
+            if(n.nodeType === 1) hideDelay(n);
+          });
+        });
+      });
+      mo.observe(document.body, { childList:true, subtree:true });
+    })();
+  </script>
 </body>
 </html>`;
 
