@@ -79,23 +79,19 @@ const MESSAGES = [
 
 // ── Assets to show ─────────────────────────────────────────────────────────────
 
+// 計10銘柄: LCM(2, 5) = 10 なので、
+// モバイル (grid-cols-2: 2列×5行) もデスクトップ (grid-cols-5: 5列×2行) もピッタリ
 const ASSETS: { symbol: string; label: string; color: string }[] = [
-  // 🇺🇸 米国株・指数
-  { symbol: 'NASDAQ:NVDA',  label: 'NVIDIA (NVDA)',       color: '#22c55e' },
-  { symbol: 'NASDAQ:AAPL',  label: 'Apple (AAPL)',        color: '#94a3b8' },
-  { symbol: 'NASDAQ:MSFT',  label: 'Microsoft (MSFT)',    color: '#3b82f6' },
-  { symbol: 'NASDAQ:META',  label: 'Meta (META)',         color: '#8b5cf6' },
-  { symbol: 'AMEX:SPY',     label: 'S&P500 (SPY)',        color: '#6366f1' },
-  // 🗾 日本株（toC著名企業）
-  { symbol: 'TSE:7203',     label: 'トヨタ自動車',        color: '#ef4444' },
-  { symbol: 'TSE:8306',     label: '三菱UFJ FG',          color: '#f97316' },
-  { symbol: 'TSE:6758',     label: 'ソニーグループ',       color: '#0ea5e9' },
-  { symbol: 'TSE:9984',     label: 'ソフトバンクG',       color: '#f59e0b' },
-  { symbol: 'TSE:7974',     label: '任天堂',              color: '#e11d48' },
-  { symbol: 'TSE:9983',     label: 'ファーストリテイリング', color: '#dc2626' },
-  // 🌐 為替・コモディティ
-  { symbol: 'FX:USDJPY',    label: 'ドル円 (USD/JPY)',    color: '#ec4899' },
-  { symbol: 'AMEX:GLD',     label: '金・ゴールド (GLD)',  color: '#d97706' },
+  { symbol: 'NASDAQ:NVDA',  label: 'NVIDIA (NVDA)',      color: '#22c55e' },
+  { symbol: 'NASDAQ:AAPL',  label: 'Apple (AAPL)',       color: '#94a3b8' },
+  { symbol: 'NASDAQ:MSFT',  label: 'Microsoft (MSFT)',   color: '#3b82f6' },
+  { symbol: 'NASDAQ:META',  label: 'Meta (META)',        color: '#8b5cf6' },
+  { symbol: 'NASDAQ:GOOGL', label: 'Google (GOOGL)',     color: '#f59e0b' },
+  { symbol: 'NASDAQ:AMZN',  label: 'Amazon (AMZN)',      color: '#f97316' },
+  { symbol: 'NASDAQ:TSLA',  label: 'Tesla (TSLA)',       color: '#ef4444' },
+  { symbol: 'AMEX:SPY',     label: 'S&P500 (SPY)',       color: '#6366f1' },
+  { symbol: 'FX:USDJPY',    label: 'ドル円 (USD/JPY)',   color: '#ec4899' },
+  { symbol: 'AMEX:GLD',     label: '金・ゴールド (GLD)', color: '#d97706' },
 ];
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -154,7 +150,7 @@ export default function SimulatingLoader() {
         <p className="text-xs text-slate-400 text-center mb-2">
           📡 待っている間に… リアルタイム市況
         </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
           {ASSETS.map(a => (
             <TradingViewMiniChart
               key={a.symbol}
