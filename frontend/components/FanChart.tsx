@@ -102,8 +102,19 @@ function generateAssetPath(
   return path;
 }
 
-/** Portfolio path with jump-diffusion — matches backend's run_monte_carlo exactly.
- *  equityWeight controls jump intensity (same formula as backend). */
+/** Portfolio path for display — centered on the fan band's median.
+ *
+ *  The backend fan band is generated with Merton jump-diffusion. Each jump has
+ *  a negative expected value, so the band's p50 sits below the naive GBM mean.
+ *  If we run full jump-diffusion here too, random crash events frequently pull
+ *  the single display path below p10 — which looks broken to users.
+ *
+ *  Fix: use simple GBM, but apply the expected jump drift adjustment so the
+ *  path's expected trajectory matches the band's median (p50).
+ *    E[jump_monthly] = lambda * jumpMean = equityWeight * 0.030 * (-0.12 * equityWeight)
+ *  Subtracting this correction from mu keeps the path centered in the band
+ *  while eliminating the catastrophic single-step drops from random jump events.
+ */
 function generatePortfolioPath(
   savings: number,
   monthly: number,
@@ -114,12 +125,10 @@ function generatePortfolioPath(
   futureChanges: FutureChange[],
   lumpSumAdditions: LumpSumAddition[],
 ): number[] {
-  const mu          = annualReturn / 12;
-  const sigma       = annualVol / Math.sqrt(12);
-  // Merton jump params — identical to backend
-  const lambdaJump  = equityWeight * 0.030;
-  const jumpMean    = -0.12 * equityWeight;
-  const jumpStd     =  0.06 * equityWeight;
+  // Expected monthly jump contribution (negative) — aligns drift with band p50
+  const jumpDriftAdj = equityWeight * 0.030 * (-0.12 * equityWeight);
+  const mu    = annualReturn / 12 + jumpDriftAdj;   // drift corrected for expected jump loss
+  const sigma = annualVol / Math.sqrt(12);
 
   const contribs = Array.from({ length: months }, () => monthly);
   for (const chg of futureChanges) {
@@ -134,11 +143,8 @@ function generatePortfolioPath(
   const path: number[] = [savings + lumps[0]];
   let v = savings + lumps[0];
   for (let m = 0; m < months; m++) {
-    let r = mu + sigma * gauss();
-    // Random crash event (Bernoulli) — same probability as backend
-    if (Math.random() < lambdaJump) {
-      r += jumpMean + jumpStd * gauss();
-    }
+    // Simple GBM (no random jump events) — path wanders around p50 of the band
+    const r = mu + sigma * gauss();
     v = v * (1 + r) + contribs[m] + lumps[m + 1];
     path.push(v);
   }
