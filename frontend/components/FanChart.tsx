@@ -303,11 +303,10 @@ export default function FanChart({
   const totalMonths = years * 12;
   const step = totalMonths > 120 ? 3 : totalMonths > 60 ? 2 : 1;
 
-  // Y-axis domain: zoom into the interesting range so the fan looks like a proper spread.
-  // yMin: just below initial savings (removes the large empty bottom area)
-  // yMax: p90 × 1.15 instead of × 1.5 (removes large empty top area)
-  // Together these make the fan occupy ~50-60% of chart height, like Bollinger Bands.
-  const yMin = Math.max(0, savings * 0.8);
+  // Y-axis domain
+  // yMin = 0 (always anchor to zero — savings vs monthly vary too much for a fixed offset)
+  // yMax = p90 × 1.15 (tighter than the old × 1.5, reduces empty space above the band)
+  const yMin = 0;
   const yMax = useMemo(() => {
     const finalP90 = percentiles['90'][totalMonths] ?? 0;
     const raw = finalP90 > 0 ? finalP90 * 1.15 : (goal * 1.5 || 1_000_000);
