@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
-// ── TradingView mini widget ────────────────────────────────────────────────────
+// ── TradingView mini widget — iframe/srcdoc approach ──────────────────────────
+// Dynamic script injection is unreliable in Next.js production builds.
+// Instead, embed each widget in a self-contained srcdoc iframe so TradingView's
+// script runs in a clean HTML context with proper document.currentScript support.
 
 interface MiniChartProps {
   symbol: string;
@@ -11,41 +14,34 @@ interface MiniChartProps {
 }
 
 function TradingViewMiniChart({ symbol, label, color }: MiniChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const config = JSON.stringify({
+    symbol,
+    width: '100%',
+    height: 115,
+    locale: 'ja',
+    dateRange: '1D',
+    colorTheme: 'light',
+    isTransparent: false,
+    autosize: false,
+    largeChartUrl: '',
+    noTimeScale: false,
+  });
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    container.innerHTML = '';
-
-    const inner = document.createElement('div');
-    inner.className = 'tradingview-widget-container__widget';
-    inner.style.cssText = 'height:100%;width:100%';
-    container.appendChild(inner);
-
-    const script = document.createElement('script');
-    script.src =
-      'https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js';
-    script.type  = 'text/javascript';
-    script.async = true;
-    script.innerHTML = JSON.stringify({
-      symbol,
-      width:        '100%',
-      height:       115,
-      locale:       'ja',
-      dateRange:    '1D',
-      colorTheme:   'light',
-      isTransparent: true,
-      autosize:     true,   // mini widget は autosize:true が必要
-      largeChartUrl: '',
-      noTimeScale:  false,
-    });
-    container.appendChild(script);
-
-    return () => {
-      if (containerRef.current) containerRef.current.innerHTML = '';
-    };
-  }, [symbol]);
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>html,body{margin:0;padding:0;overflow:hidden;background:#f8fafc}</style>
+</head>
+<body>
+  <div class="tradingview-widget-container" style="height:115px;width:100%">
+    <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+    <script type="text/javascript"
+      src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js"
+      async>${config}</script>
+  </div>
+</body>
+</html>`;
 
   return (
     <div className="rounded-xl overflow-hidden bg-white border border-slate-200">
@@ -57,11 +53,13 @@ function TradingViewMiniChart({ symbol, label, color }: MiniChartProps) {
         />
         <span className="text-[11px] font-semibold text-slate-500">{label}</span>
       </div>
-      {/* Skeleton sits behind; TradingView overlays it once loaded */}
-      <div style={{ height: '115px', position: 'relative' }}>
-        <div className="absolute inset-0 bg-slate-100 animate-pulse" />
-        <div ref={containerRef} style={{ height: '115px', position: 'relative', zIndex: 1 }} />
-      </div>
+      {/* iframe embeds TradingView in an isolated HTML context */}
+      <iframe
+        srcDoc={html}
+        style={{ width: '100%', height: '115px', border: 'none', display: 'block' }}
+        scrolling="no"
+        title={label}
+      />
     </div>
   );
 }
