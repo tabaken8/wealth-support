@@ -260,10 +260,14 @@ export default function FanChart({
   const totalMonths = years * 12;
   const step = totalMonths > 120 ? 3 : totalMonths > 60 ? 2 : 1;
 
-  // Fixed Y-axis domain: upper limit = 1.5× the p90 band top (so the blue band fills ~2/3 of chart)
+  // Y-axis domain: zoom into the interesting range so the fan looks like a proper spread.
+  // yMin: just below initial savings (removes the large empty bottom area)
+  // yMax: p90 × 1.15 instead of × 1.5 (removes large empty top area)
+  // Together these make the fan occupy ~50-60% of chart height, like Bollinger Bands.
+  const yMin = Math.max(0, savings * 0.8);
   const yMax = useMemo(() => {
     const finalP90 = percentiles['90'][totalMonths] ?? 0;
-    const raw = finalP90 > 0 ? finalP90 * 1.5 : (goal * 2 || 1_000_000);
+    const raw = finalP90 > 0 ? finalP90 * 1.15 : (goal * 1.5 || 1_000_000);
     const mag = Math.pow(10, Math.floor(Math.log10(raw)));
     return Math.ceil(raw / mag) * mag;
   }, [data, totalMonths]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -413,7 +417,7 @@ export default function FanChart({
               axisLine={false}
               tickLine={false}
               width={52}
-              domain={[0, yMax]}
+              domain={[yMin, yMax]}
               allowDataOverflow
             />
             <Tooltip content={
