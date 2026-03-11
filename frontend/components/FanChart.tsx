@@ -102,6 +102,49 @@ function generateAssetPath(
   return path;
 }
 
+/** Portfolio path with jump-diffusion — matches backend's run_monte_carlo exactly.
+ *  equityWeight controls jump intensity (same formula as backend). */
+function generatePortfolioPath(
+  savings: number,
+  monthly: number,
+  months: number,
+  annualReturn: number,
+  annualVol: number,
+  equityWeight: number,
+  futureChanges: FutureChange[],
+  lumpSumAdditions: LumpSumAddition[],
+): number[] {
+  const mu          = annualReturn / 12;
+  const sigma       = annualVol / Math.sqrt(12);
+  // Merton jump params — identical to backend
+  const lambdaJump  = equityWeight * 0.030;
+  const jumpMean    = -0.12 * equityWeight;
+  const jumpStd     =  0.06 * equityWeight;
+
+  const contribs = Array.from({ length: months }, () => monthly);
+  for (const chg of futureChanges) {
+    const from = Math.max(0, Math.min(chg.from_month, months));
+    for (let m = from; m < months; m++) contribs[m] += chg.monthly_delta;
+  }
+  const lumps = new Array(months + 1).fill(0);
+  for (const ls of lumpSumAdditions) {
+    if (ls.at_month >= 0 && ls.at_month <= months) lumps[ls.at_month] += ls.amount;
+  }
+
+  const path: number[] = [savings + lumps[0]];
+  let v = savings + lumps[0];
+  for (let m = 0; m < months; m++) {
+    let r = mu + sigma * gauss();
+    // Random crash event (Bernoulli) — same probability as backend
+    if (Math.random() < lambdaJump) {
+      r += jumpMean + jumpStd * gauss();
+    }
+    v = v * (1 + r) + contribs[m] + lumps[m + 1];
+    path.push(v);
+  }
+  return path;
+}
+
 function fmtJPY(v: number): string {
   const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
@@ -291,18 +334,25 @@ export default function FanChart({
     savings, monthly, totalMonths, futureChanges, lumpSumAdditions,
   ), [savings, monthly, totalMonths, futureChanges, lumpSumAdditions]);
 
-  // Combined portfolio path — use the portfolio-level return/vol from the backend
-  // so that the black line uses the SAME parameters as the blue fan band,
-  // making it converge into the band the majority of the time.
+  // Equity weight: needed for jump-diffusion intensity (same as backend)
+  const equityWeight = useMemo(() =>
+    asset_stats
+      .filter(s => ['VT', 'SPY', 'EWJ', 'FNGS', 'BTC-USD'].includes(s.ticker))
+      .reduce((sum, s) => sum + s.weight, 0),
+  [asset_stats]);
+
+  // Portfolio path with Merton jump-diffusion — matches backend run_monte_carlo exactly,
+  // so the black line is drawn from the same distribution as the blue fan band.
   const portfolioPath = useMemo(() => {
-    return generateAssetPath(
+    return generatePortfolioPath(
       savings, monthly, totalMonths,
       data.expected_annual_return, data.annual_volatility,
+      equityWeight,
       futureChanges, lumpSumAdditions,
     );
   // refreshKey triggers re-generation
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, savings, monthly, years, refreshKey]);
+  }, [data, savings, monthly, years, equityWeight, refreshKey]);
 
   // Terminal values for right-edge annotation
   // depositTerminalValue from backend takes priority to stay in sync with the stats panel below
