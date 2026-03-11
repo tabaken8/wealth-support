@@ -287,16 +287,18 @@ export default function FanChart({
     savings, monthly, totalMonths, futureChanges, lumpSumAdditions,
   ), [savings, monthly, totalMonths, futureChanges, lumpSumAdditions]);
 
-  // Combined portfolio path (weighted sum of individual asset paths)
+  // Combined portfolio path — use the portfolio-level return/vol from the backend
+  // so that the black line uses the SAME parameters as the blue fan band,
+  // making it converge into the band the majority of the time.
   const portfolioPath = useMemo(() => {
-    if (assetPaths.length === 0) return [];
-    const totalWeight = assetPaths.reduce((s, ap) => s + (ap.weight || 0), 0);
-    if (totalWeight === 0) return [];
-    return Array.from({ length: totalMonths + 1 }, (_, i) =>
-      Math.max(0, assetPaths.reduce((sum, ap) =>
-        sum + (ap.path[i] ?? 0) * ((ap.weight || 0) / totalWeight), 0))
+    return generateAssetPath(
+      savings, monthly, totalMonths,
+      data.expected_annual_return, data.annual_volatility,
+      futureChanges, lumpSumAdditions,
     );
-  }, [assetPaths, totalMonths]);
+  // refreshKey triggers re-generation
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, savings, monthly, years, refreshKey]);
 
   // Terminal values for right-edge annotation
   // depositTerminalValue from backend takes priority to stay in sync with the stats panel below

@@ -57,8 +57,11 @@ function TradingViewMiniChart({ symbol, label, color }: MiniChartProps) {
         />
         <span className="text-[11px] font-semibold text-slate-500">{label}</span>
       </div>
-      {/* Chart container — explicit height prevents collapse; bg-slate-100 acts as skeleton */}
-      <div ref={containerRef} style={{ height: '115px' }} className="bg-slate-100 animate-pulse" />
+      {/* Skeleton sits behind; TradingView overlays it once loaded */}
+      <div style={{ height: '115px', position: 'relative' }}>
+        <div className="absolute inset-0 bg-slate-100 animate-pulse" />
+        <div ref={containerRef} style={{ height: '115px', position: 'relative', zIndex: 1 }} />
+      </div>
     </div>
   );
 }
