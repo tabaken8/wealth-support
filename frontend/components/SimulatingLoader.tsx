@@ -13,18 +13,28 @@ interface MiniChartProps {
   color: string;
 }
 
+// TradingView mini widget injects a nested cross-origin iframe, so CSS/JS from
+// the srcdoc cannot reach "遅" inside it. Instead we render the widget taller
+// than needed and use a negative margin-top to push TradingView's own header
+// (symbol name + price row where "遅" lives, ~50 px) above the clipped viewport.
+// The body is clamped to VISIBLE_H px with overflow:hidden, so only the chart
+// portion shows — no header, no "遅".
+const VISIBLE_H  = 100; // px shown to user (chart-only portion)
+const HEADER_H   =  52; // px of TradingView header to clip away
+const WIDGET_H   = VISIBLE_H + HEADER_H; // total TV widget height
+
 function TradingViewMiniChart({ symbol, label, color }: MiniChartProps) {
   const config = JSON.stringify({
     symbol,
     width: '100%',
-    height: 115,
+    height: WIDGET_H,
     locale: 'ja',
     dateRange: '1D',
     colorTheme: 'light',
     isTransparent: false,
     autosize: false,
     largeChartUrl: '',
-    noTimeScale: false,
+    noTimeScale: true,   // hide bottom time axis (cleaner at reduced height)
   });
 
   const html = `<!DOCTYPE html>
@@ -32,43 +42,25 @@ function TradingViewMiniChart({ symbol, label, color }: MiniChartProps) {
 <head>
   <meta charset="utf-8">
   <style>
-    html,body{margin:0;padding:0;overflow:hidden;background:#f8fafc}
-    /* Hide TradingView delayed-data label (class names vary by build) */
-    [class*="delay"i],[class*="Delay"],[class*="delayed"i],
-    [class*="quote-delay"],[class*="quoteDelay"],
-    .tv-symbol-price-quote__currency-and-delay { display:none !important; }
+    html { margin:0; padding:0; overflow:hidden; background:#f8fafc; height:${VISIBLE_H}px; }
+    body { margin:0; padding:0; overflow:hidden; background:#f8fafc; height:${VISIBLE_H}px; }
+    /* Push widget up so the header (with "遅") scrolls above the clipped viewport */
+    #tv-wrap {
+      margin-top: -${HEADER_H}px;
+      height: ${WIDGET_H}px;
+      width: 100%;
+    }
   </style>
 </head>
 <body>
-  <div class="tradingview-widget-container" style="height:115px;width:100%">
-    <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
-    <script type="text/javascript"
-      src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js"
-      async>${config}</script>
+  <div id="tv-wrap">
+    <div class="tradingview-widget-container" style="height:${WIDGET_H}px;width:100%">
+      <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+      <script type="text/javascript"
+        src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js"
+        async>${config}</script>
+    </div>
   </div>
-  <script>
-    // MutationObserver fallback: hide any element whose text is exactly "遅"
-    (function(){
-      function hideDelay(root){
-        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
-        var node;
-        while((node = walker.nextNode())){
-          if(node.nodeValue && node.nodeValue.trim() === '遅'){
-            var el = node.parentElement;
-            if(el) el.style.setProperty('display','none','important');
-          }
-        }
-      }
-      var mo = new MutationObserver(function(mutations){
-        mutations.forEach(function(m){
-          m.addedNodes.forEach(function(n){
-            if(n.nodeType === 1) hideDelay(n);
-          });
-        });
-      });
-      mo.observe(document.body, { childList:true, subtree:true });
-    })();
-  </script>
 </body>
 </html>`;
 
@@ -82,10 +74,10 @@ function TradingViewMiniChart({ symbol, label, color }: MiniChartProps) {
         />
         <span className="text-[11px] font-semibold text-slate-500">{label}</span>
       </div>
-      {/* iframe embeds TradingView in an isolated HTML context */}
+      {/* iframe: height matches VISIBLE_H (chart-only, header clipped away) */}
       <iframe
         srcDoc={html}
-        style={{ width: '100%', height: '115px', border: 'none', display: 'block' }}
+        style={{ width: '100%', height: `${VISIBLE_H}px`, border: 'none', display: 'block' }}
         scrolling="no"
         title={label}
       />
